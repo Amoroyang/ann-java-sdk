@@ -1,8 +1,11 @@
 package com.genesis.api;
 
+import com.genesis.api.bean.model.ReceiptLogs;
+import com.genesis.api.bean.model.ReceiptObject;
 import org.ethereum.core.Bloom;
 import org.ethereum.core.Transaction;
 import org.ethereum.util.*;
+import org.ethereum.vm.DataWord;
 import org.ethereum.vm.LogInfo;
 import org.spongycastle.util.BigIntegers;
 import org.spongycastle.util.encoders.Hex;
@@ -40,20 +43,20 @@ public class TransactionReceipt {
     private byte[] transactionHash;
     private byte[] contractAddress;
     private BigInteger gasUsed;
-    
+
     private BigInteger transactionIndex;
     private BigInteger height;
     private byte[] blockHash = EMPTY_BYTE_ARRAY;
     private byte[] from;
     private byte[] to;
     private BigInteger timestamp;
-    
-    
+
+
     private byte[] executionResult = EMPTY_BYTE_ARRAY;
     private String error = "";
     /* Tx Receipt in encoded form */
     private byte[] rlpEncoded;
-    
+
 
     public TransactionReceipt() {
     }
@@ -71,22 +74,23 @@ public class TransactionReceipt {
         RLPItem contractAddressRLP = (RLPItem) receipt.get(4);
 
         postTxState = nullToEmpty(postTxStateRLP.getRLPData());
-        
+
         if(cumulativeGasRLP.getRLPData() == null) {
-        	cumulativeGas = BigInteger.valueOf(0);
-    	}else {
-    		cumulativeGas = Numeric.toBigInt(cumulativeGasRLP.getRLPData());
-    	}
-        
+            cumulativeGas = BigInteger.valueOf(0);
+        }else {
+            cumulativeGas = Numeric.toBigInt(cumulativeGasRLP.getRLPData());
+        }
+
         bloomFilter = new Bloom(bloomRLP.getRLPData());
 
         if(gasUsedRLP.getRLPData() == null) {
-        	gasUsed = BigInteger.valueOf(0);
-    	}else {
-    		gasUsed = Numeric.toBigInt(gasUsedRLP.getRLPData());
-    	}
-        
+            gasUsed = BigInteger.valueOf(0);
+        }else {
+            gasUsed = Numeric.toBigInt(gasUsedRLP.getRLPData());
+        }
+
         transactionHash = transactionHashRLP.getRLPData();
+        log.info("txHash={}",Hex.toHexString(transactionHash));
         contractAddress =  contractAddressRLP.getRLPData();
         for (RLPElement log : logs) {
             LogInfo logInfo = new LogInfo(log.getRLPData());
@@ -140,13 +144,13 @@ public class TransactionReceipt {
     public BigInteger getCumulativeGasLong() {
         return cumulativeGas;
     }
-    
+
     public byte[] getTransactionHash() {
-    	return transactionHash;
+        return transactionHash;
     }
-    
+
     public byte[] getContractAddress() {
-    	return contractAddress;
+        return contractAddress;
     }
 
     public Bloom getBloomFilter() {
@@ -253,20 +257,20 @@ public class TransactionReceipt {
     public void setTransaction(Transaction transaction) {
         this.transaction = transaction;
     }
-    
+
     public void setContractAddress(byte[] contractAddress) {
-    	this.contractAddress = contractAddress;
+        this.contractAddress = contractAddress;
     }
-    
+
     public void setTransactionHash(byte[] transactionHash) {
-    	this.transactionHash = transactionHash;
+        this.transactionHash = transactionHash;
     }
 
     public Transaction getTransaction() {
         if (transaction == null) throw new NullPointerException("Transaction is not initialized. Use TransactionInfo and BlockStore to setup Transaction instance");
         return transaction;
     }
-    
+
     public byte[] getBlockHash() {
         return blockHash;
     }
@@ -278,65 +282,89 @@ public class TransactionReceipt {
     public BigInteger getTransactionIndex() {
         return transactionIndex;
     }
-    
-    
+
+
     public BigInteger getTimestamp() {
         return timestamp;
     }
-    
+
     public byte[] getFrom() {
-    	return from;
+        return from;
     }
-    
+
     public byte[] getTo() {
-    	return to;
+        return to;
     }
-    
+
     public void setBlockHash(byte[] blockHash) {
         this.blockHash = blockHash;
     }
-    
+
     public void setBlockHeight(byte[] height) {
         this.height = Numeric.toBigInt(height);
     }
-    
+
     public void setTransactionIndex(BigInteger transactionIndex) {
         this.transactionIndex = transactionIndex;
     }
-    
+
     public void setTimestamp(BigInteger timestamp) {
         this.timestamp = timestamp;
     }
-    
+
     public void setFrom(byte[] from) {
-    	this.from = from;
-    }
-    
-    public void setTo(byte[] to) {
-    	this.to = to;
+        this.from = from;
     }
 
+    public void setTo(byte[] to) {
+        this.to = to;
+    }
+
+    public ReceiptObject getReceiptObject(){
+        ReceiptObject object = new ReceiptObject();
+        object.setBloom(bloomFilter.toString());
+        object.setContractAddress(Hex.toHexString(to));
+        object.setTxHash(Hex.toHexString(transactionHash));
+        object.setCumulativeGasUsed(cumulativeGas);
+        object.setGasUsed(gasUsed);
+        object.setHeight(height);
+        object.setPostState(Hex.toHexString(postTxState));
+        ReceiptLogs[] logs = new ReceiptLogs[logInfoList.size()];
+        for(int i=0;i<logInfoList.size();i++){
+            LogInfo logInfo = logInfoList.get(i);
+            ReceiptLogs inner = new ReceiptLogs();
+            inner.setAddress(Hex.toHexString(logInfo.getAddress()));
+            inner.setData(Hex.toHexString(logInfo.getData()));
+            String[] topics = new String[logInfo.getTopics().size()];
+            for (int j=0;j<logInfo.getTopics().size();j++) {
+                String topicStr = Hex.toHexString(logInfo.getTopics().get(j).getData());
+                topics[j] = topicStr;
+            }
+            inner.setTopics(topics);
+            logs[i] = inner;
+        }
+
+        return object;
+    }
 
     @Override
     public String toString() {
 
         // todo: fix that
 
-        return "TransactionReceipt[" +
-                "\n  , postTxState=" + postTxState +
-                "\n  , cumulativeGas=" + cumulativeGas +
-                "\n  , bloom=" + bloomFilter.toString() +
-                "\n  , logs=" + logInfoList +
-                "\n  , transactionHash=" + Hex.toHexString(transactionHash) +
-                "\n  , contractAddress=" + Hex.toHexString(contractAddress) +
-                "\n  , gasUsed=" + gasUsed +
-                "\n  , transactionIndex=" +transactionIndex +
-                "\n  , height=" + height +
-                "\n  , blockhash=" +Hex.toHexString(blockHash)+
-                "\n  , from=" +Hex.toHexString(from)+
-                "\n  , to=" + Hex.toHexString(to)+
-                "\n  , time=" + timestamp +
-                "\n  , error=" + error +
-                ']';
+        return "{\"postTxState\":\"" + Hex.toHexString(postTxState)+"\"" +
+                "\n  , \"cumulativeGas\":" + cumulativeGas +
+                "\n  , \"Bloom\":\"" + bloomFilter.toString() +
+                "\n  , \"Logs\":[{" + logInfoList +
+                "\n  , \"transactionHash\":" + Hex.toHexString(transactionHash) +
+                "\n  , \"contractAddress\":" + Hex.toHexString(contractAddress) +
+                "\n  , \"gasUsed\":" + gasUsed +
+                "\n  , \"transactionIndex\":" +transactionIndex +
+                "\n  , \"height\":" + height +
+                "\n  , \"blockhash\":" +Hex.toHexString(blockHash)+
+                "\n  , \"from\":" +Hex.toHexString(from)+
+                "\n  , \"to\":" + Hex.toHexString(to)+
+                "\n  , \"time\":" + timestamp +
+                '}';
     }
 }
