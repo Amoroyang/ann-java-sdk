@@ -1,4 +1,31 @@
 
+import java.io.IOException;
+import java.math.BigInteger;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import org.bouncycastle.crypto.CryptoException;
+import org.bouncycastle.util.encoders.Hex;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.web3j.abi.FunctionReturnDecoder;
+import org.web3j.abi.TypeReference;
+import org.web3j.abi.datatypes.Address;
+import org.web3j.abi.datatypes.Event;
+import org.web3j.abi.datatypes.Function;
+import org.web3j.abi.datatypes.Type;
+import org.web3j.abi.datatypes.Uint;
+import org.web3j.abi.datatypes.Utf8String;
+import org.web3j.abi.datatypes.generated.Uint256;
+import org.web3j.crypto.RawTransaction;
+import org.web3j.rlp.RlpDecoder;
+import org.web3j.rlp.RlpList;
+import org.web3j.rlp.RlpString;
+import org.web3j.utils.Numeric;
+
 import com.genesis.api.CryptoUtil;
 import com.genesis.api.NodeSrv;
 import com.genesis.api.RawTransactionData;
@@ -14,25 +41,8 @@ import com.genesis.api.bean.model.DeployContractResult;
 import com.genesis.api.crypto.PrivateKey;
 import com.genesis.api.crypto.PrivateKeyECDSA;
 import com.genesis.api.crypto.Signature;
-import lombok.extern.slf4j.Slf4j;
-import org.bouncycastle.crypto.CryptoException;
-import org.bouncycastle.util.encoders.Hex;
-import org.ethereum.util.blockchain.TransactionResult;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.web3j.abi.FunctionReturnDecoder;
-import org.web3j.abi.TypeReference;
-import org.web3j.abi.datatypes.*;
-import org.web3j.abi.datatypes.generated.Uint256;
-import org.web3j.crypto.RawTransaction;
-import org.web3j.rlp.*;
-import org.web3j.utils.Numeric;
 
-import java.io.IOException;
-import java.math.BigInteger;
-import java.util.Arrays;
-import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 
 
 @Slf4j
@@ -55,43 +65,82 @@ public class NodeApiTest {
     private static PrivateKey privKey = new PrivateKeyECDSA(PRIVATE_KEY);
     private static PrivateKey privKey2 = new PrivateKeyECDSA(PRIVATE_KEY2);
 
-
+    
+    
 
 
     @BeforeClass
     public static void init() throws IOException{	
-        nodeSrv = new NodeSrv("http://localhost:46657");
+//        nodeSrv = new NodeSrv("http://localhost:46657");
+//    	nodeSrv = new NodeSrv("https://baas-poc0.zhongan.io");
+    	nodeSrv = new NodeSrv("http://172.28.133.209:46657");
     }
     
     @Test
     public void test() throws IOException, InterruptedException, CryptoException{
-    	testQueryNonce();
-    	
     	// contract
     	testDeployContract();
-    	testCallContactWithSig();
-    	testCallContactAsync();
-    	testQueryContract();
-    	testQueryContractWithSig();
-    	testQueryRecp();
-    	testRlp();
-    	testQueryTxHashsByHeight();
-    	testQueryRawTransactionByHash();
+
+    	String accountAddress = privKey.getAddress();
+        //获取nonce
+        int nonce = nodeSrv.queryNonce(accountAddress)-1;
+        log.info("nonce {}" , nonce);
+        
+    	ExecutorService executor = Executors.newFixedThreadPool(50);
+        for (int i = 0; i < 2000; i++) {
+        	nonce = nonce +1 ;
+        	executor.execute(new TestRunnable(nonce));
+        }
+        Thread.sleep(1000*60);
+        System.out.println("game over!!!!!!!!!!!!!!!!!");
+
     	
-    	// KV 
-    	testPutKV();
-    	queryKV();
-    	testPutKVAsync();
-    	queryKV2();
-    	queryKVNotExist();
-    	testPutKVs();
-    	queryPreKV();
-    	queryPreKV2();
     	
-    	// payload
-    	testSendPayload();
+//    	testQueryNonce();
+//    	testCallContactAsync();
+//    	testQueryContract();
+//    	testQueryContractWithSig();
+//    	testQueryRecp();
+//    	testRlp();
+//    	testQueryTxHashsByHeight();
+//    	testQueryRawTransactionByHash();
+//    	
+//    	// KV 
+//    	testPutKV();
+//    	queryKV();
+//    	testPutKVAsync();
+//    	queryKV2();
+//    	queryKVNotExist();
+//    	testPutKVs();
+//    	queryPreKV();
+//    	queryPreKV2();
+//    	
+//    	// payload
+//    	testSendPayload();
     }
 
+    class TestRunnable implements Runnable{
+
+    	private int i ;
+    	
+    	TestRunnable(int i){
+    		this.i = i;
+    	}
+    	
+		@Override
+		public void run() {
+			try {
+				// sync
+//				testCallContactWithSig2(i);
+				//async
+				testCallContactAsync2(i);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				log.info("error:{}",e);
+			}
+		}
+    }
+    
     // @Test
     public void testDeployContract() throws IOException, InterruptedException {
         String accountAddress = privKey.getAddress();
@@ -104,6 +153,18 @@ public class NodeApiTest {
         log.info("contractAddr {}",contractAddress);
         log.info("deploy txHash {}",deployRes.getTxHash());
         Thread.sleep(2000);
+    }
+    
+ // @Test
+    public void testCallContactWithSig2(int nonce) throws IOException, InterruptedException, CryptoException {
+    		// event 定义
+            Function functionDef = new Function("deposit", 
+            		Arrays.asList(
+            		new org.web3j.abi.datatypes.generated.Uint256(18),
+            		new org.web3j.abi.datatypes.Utf8String("test1")), 
+            		Arrays.asList());   
+            String resp = nodeSrv.callContractEvm(BigInteger.valueOf(nonce), contractAddress, functionDef, privKey, null, true) ;
+            log.info("call contract resp with sig nonce:" + nonce + "res:" + resp);
     }
     
     // @Test
@@ -131,13 +192,27 @@ public class NodeApiTest {
                 contractAddress,
                 functionDef, //函数接口定义
                 sig,
-                new DemoEventCallBack(DEPOSIT)); //callBack
+                null); //callBack
         existTxHash = resp;
         log.info("call contract resp with sig:" + resp);
 
         Thread.sleep(2000);
     }
 
+ // @Test
+    public void testCallContactAsync2(int nonce) throws IOException, InterruptedException, CryptoException {
+
+        /**
+         * 参考test.sol
+         */
+        Function functionDef = new Function("deposit", 
+        		Arrays.asList(
+                new org.web3j.abi.datatypes.generated.Uint256(19),
+                new org.web3j.abi.datatypes.Utf8String("test2")), 
+                Arrays.asList());
+        String resp = nodeSrv.callContractEvm(BigInteger.valueOf(nonce), contractAddress, functionDef, privKey, null, false) ;
+        log.info("call contract resp with sig nonce:" + nonce + "res:" + resp);
+    }
 
     // @Test
     public void testCallContactAsync() throws IOException, InterruptedException, CryptoException {
@@ -212,7 +287,7 @@ public class NodeApiTest {
     // @Test
     public void testQueryRecp() throws IOException {
     	log.info("receipt_hash:" + existTxHash);
-    	TransactionReceipt resp = nodeSrv.queryReceiptRaw(existTxHash);
+    	TransactionReceipt resp = nodeSrv.queryReceiptRaw("0x5623961ded604c250f64eb1efcdfb481e3f196cc669338047c5b2efb3009c798");
         Assert.assertNotNull(resp);
         blockHeight = resp.getHeight();
         log.info("receipt:" + resp);
@@ -252,7 +327,7 @@ public class NodeApiTest {
     
     // @Test
     public void testQueryRawTransactionByHash() throws IOException {
-    	RawTransactionData rawTx = nodeSrv.queryRawTransactionByHash(existTxHash);
+    	RawTransactionData rawTx = nodeSrv.queryRawTransactionByHash("0xea8abf8fc0c375c1072c8832f3158ee376838db9b12d0713e1cceb7f74d5ca8d");
         log.info("to={},nonce={},amout={},gaslimit={},gasprice={},input={},v={},r={},s={}",Hex.toHexString(rawTx.getTo()),rawTx.getNonce(),rawTx.getValue(),rawTx.getGas(),rawTx.getGasprice(),rawTx.getInput(),rawTx.getV(),rawTx.getR(),rawTx.getS());
     }
     
